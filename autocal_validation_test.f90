@@ -111,6 +111,7 @@ program autocal_validation
         do k=1,config%len_para
             read(109+myid,*) param_vec(k)
         end do 
+        close(109+myid)
         call update_param(fprj_new,param_vec,config%len_para)
         call Call_EasyDHM_Dll(fprj_new)
         call Result_out(fprj_new%nCount,result_vec)
@@ -153,6 +154,7 @@ program autocal_validation
             do k=1,config%len_para
                 read(109+myid,*) param_vec(k)
             end do 
+            close(109+myid)
             call update_param(fprj_new,param_vec,config%len_para)
             call Call_EasyDHM_Dll(fprj_new)
             call Result_out(fprj_new%nCount,result_vec)
