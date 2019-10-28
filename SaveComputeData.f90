@@ -99,21 +99,24 @@ module SaveComputeData
     !sim->模型计算结果
     !nCount->流量过程长度    
     !trial->当前循环次数-用于设置文件名称    
+    !member->当前参数组合对应的文件名称，用于生成新的文件名称
     !of->目标函数值
-    subroutine save_result_vali(obs,sim,nCount,trial,of)
+    subroutine save_result_vali(obs,sim,nCount,trial,member,of)
         implicit none
         integer,intent(in) :: nCount,trial
         real,intent(in) :: of
         real,dimension(nCount),intent(in) :: obs,sim
+        character(len=:),allocatable,intent(in):: member
         ! real,dimension(:),intent(in) :: param
-        character(len=255) :: name1,name2,trialchar
+        character(len=255) :: name2
         integer :: i
 
-        write(trialchar,*) trial
+        ! write(trialchar,*) trial
         ! write(processchar,*) process
         ! write(name1,*) './result/'&
         ! &//'vali_'//trim(adjustl(trialchar))//'_param.txt'
-        write(name2,*) './result2/vali_'//trim(adjustl(trialchar))//'_result.txt'
+        ! write(name2,*) './result2/vali_'//trim(adjustl(trialchar))//'_result.txt'
+        write(name2,*) './result2/vali_'//trim(adjustl(member))
         
         ! open(125+trial+process,file = trim(adjustl(name1)), status = 'replace')
         ! write(125+trial+process,*) of
