@@ -27,10 +27,10 @@ program autocal_validation
     type(configType) :: config
     integer :: n_errors,error
     integer :: i,j,k
-    integer :: batch0,batch
+    integer :: batch0,batch !!batch0->参数的个数与总进程数相除的余数；batch->除根进程外跟每个进程上面计算的参数组数量，根进程上计算batch+batch0组参数
     real,dimension(:),allocatable :: param_vec
     real,dimension(:),allocatable :: result_vec
-    character(len=25),allocatable,dimension(:) :: param_files,local_param_files
+    character(len=32),allocatable,dimension(:) :: param_files,local_param_files
     real :: of  !模型评价指标的水平
 
 
@@ -48,7 +48,7 @@ program autocal_validation
 
         i=0 !i为参数的个数
         j=0
-        !获取参数文件
+        !获取参数文件 **************
         write(*,*) 'start reading list file..'
         open(108,file=list_dir//list_file)
         do while(.true.)
@@ -62,32 +62,39 @@ program autocal_validation
             read(108,*) param_files(j)
         end do
         close(108)
+        ! *************************
 
+        !得到每个进程上计算多少组参数
         batch0 = mod(i,numprocs)
         batch = i/numprocs
         ! write(*,*) 'i is',i,' blocks is ',blocks,' batch is ',batch
+        !将每个进程上的参数数量发送给各个进程，让其初始化local_param_files，即文件名称缓存
         call MPI_BCAST(batch,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
-
+        !根进程与其他进程不同，要将除不尽的几组参数也进行计算 
+        !根进程最多要计算(batch+numprocs-1)组参数，可能会是拖慢计算速度的因素之一
         allocate(local_param_files(batch+batch0))
 
         allocate(scounts(numprocs))
         allocate(displs(numprocs))
 
-        scounts(1) = (batch+batch0) * 25
+        !保存发送给每个进程的参数数量(scounts)和偏移量(displs)
+        !比较特殊的有1)根进程->参数数量与其他进程不同，为batch+batch0，且偏移量为0；2)第1（mpi计数法，fortran中为第2）个进程，偏移量与其他进程不同，为batch+batch0
+        !* 32是由于MPI通信字符变量时只能以1个字节为单位
+        scounts(1) = (batch+batch0) * 32
         displs(1) = 0
-        scounts(2) = batch * 25
-        displs(2) = (batch+batch0) * 25
+        scounts(2) = batch * 32
+        displs(2) = (batch+batch0) * 32
 
         do j=3,numprocs
-            scounts(j) = batch * 25
-            displs(j) = displs(j-1) + batch * 25
+            scounts(j) = batch * 32
+            displs(j) = displs(j-1) + batch * 32
         end do
 
         ! scounts(numprocs) = (batch+batch0) * 25
         ! displs(numprocs) = (numprocs-1) * batch * 25
 
         call MPI_SCATTERV(param_files(1),scounts,displs,MPI_CHARACTER,&
-        &local_param_files(1),((batch+batch0) * 25),MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
+        &local_param_files(1),((batch+batch0) * 32),MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
 
         write(*,*) 'the first result on ',myid,' is ',local_param_files(1)
         write(*,*) 'the last result on ',myid,' is ',local_param_files(batch+batch0)
@@ -105,7 +112,7 @@ program autocal_validation
     !但有个问题，不知道param_files数组有多长，应该分配多少进程合适。这个可能需要问一下。
     !循环读取参数并计算
     do j=1,batch+batch0
-        write(*,*) j
+        ! write(*,*) j
         open(109+myid,file=list_dir//trim(adjustl(local_param_files(j))))
         read(109+myid,*) !跳过参数文件第一行，这一行是率定期的NSE指标
         do k=1,config%len_para
@@ -115,14 +122,14 @@ program autocal_validation
         call update_param(fprj_new,param_vec,config%len_para)
         call Call_EasyDHM_Dll(fprj_new)
         call Result_out(fprj_new%nCount,result_vec)
-        write(*,*) 'total len of result is ', size(result_vec)
+        ! write(*,*) 'total len of result is ', size(result_vec)
         of = objm_mpi(config%fq,result_vec,0)   !计算模型的评价指标。参数0指代NSE评价指标
         ! call save_result_proc(config%fq,result_vec,fprj_new%nCount,param_vec,j,888,of)
         !要在save_result_vali函数中增加文件名称参数，使得率定期计算结果能和验证期对得上
-        call save_result_vali(config%fq,result_vec,fprj_new%nCount,j,of)
+        call save_result_vali(config%fq,result_vec,fprj_new%nCount,j,trim(adjustl(local_param_files(j))),of)
         call Destroy()
 
-        write(*,*) 'the NSE of trai ',i,'  is ',of
+        ! write(*,*) 'the NSE of trai ',i,'  is ',of
     end do
 
 
@@ -133,7 +140,7 @@ program autocal_validation
         call MPI_BCAST(batch,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
         allocate(local_param_files(batch))
         call MPI_SCATTERV(param_files(1),scounts,displs,MPI_CHARACTER,&
-        &local_param_files(1),((batch) * 25),MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
+        &local_param_files(1),((batch) * 32),MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
         write(*,*) 'the first result on ',myid,' is ',local_param_files(1)
         write(*,*) 'the first result on ',myid,' is ',local_param_files(batch)
 
@@ -148,7 +155,7 @@ program autocal_validation
     !但有个问题，不知道param_files数组有多长，应该分配多少进程合适。这个可能需要问一下。
     !循环读取参数并计算
         do j=1,batch
-            write(*,*) j
+            ! write(*,*) j
             open(109+myid,file=list_dir//trim(adjustl(local_param_files(j))))
             read(109+myid,*) !跳过参数文件第一行，这一行是率定期的NSE指标
             do k=1,config%len_para
@@ -158,14 +165,14 @@ program autocal_validation
             call update_param(fprj_new,param_vec,config%len_para)
             call Call_EasyDHM_Dll(fprj_new)
             call Result_out(fprj_new%nCount,result_vec)
-            write(*,*) 'total len of result is ', size(result_vec)
+            ! write(*,*) 'total len of result is ', size(result_vec)
             of = objm_mpi(config%fq,result_vec,0)   !计算模型的评价指标。参数0指代NSE评价指标
             ! call save_result_proc(config%fq,result_vec,fprj_new%nCount,param_vec,j,888,of)
             !要在save_result_vali函数中增加文件名称参数，使得率定期计算结果能和验证期对得上
-            call save_result_vali(config%fq,result_vec,fprj_new%nCount,j,of)
+            call save_result_vali(config%fq,result_vec,fprj_new%nCount,j,trim(adjustl(local_param_files(j))),of)
             call Destroy()
 
-            write(*,*) 'the NSE of trai ',i,'  is ',of
+            ! write(*,*) 'the NSE of trai ',i,'  is ',of
         end do
         call MPI_BARRIER(MPI_COMM_WORLD,ierr)
     end if

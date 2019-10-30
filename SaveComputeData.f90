@@ -155,7 +155,7 @@ module SaveComputeData
     !返回模型评价指标结果
     !obs->实测流量过程
     !sim->模型计算结果
-    !objid ->评价指标代号：1->NSE
+    !objid ->评价指标代号：0->NSE
     !of -> 评价指标水平
     function objm_mpi(obs,sim,objid) result(of)
         implicit none
